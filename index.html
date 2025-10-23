@@ -19,7 +19,7 @@
     h1{font-size:18px;margin:0;letter-spacing:.3px}
     .controls{display:flex;gap:10px;flex-wrap:wrap;align-items:end}
     label{font-size:12px;color:var(--muted);display:block;margin:0 0 6px}
-    input,select{width:100%;background:#0f1624;border:1px solid #1a2536;border-radius:12px;padding:10px;color:var(--text);outline:none}
+    input,select{width:100%;background:#0f1624;border:1px solid #1a2536;border-radius:12px;padding:10px;color:var(--text);outline:none;font-size:16px}
     input:focus,select:focus{border-color:var(--accent);box-shadow:0 0 0 4px rgba(96,165,250,.15)}
     .btn{background:#182133;border:1px solid #27354b;color:var(--text);padding:10px 14px;border-radius:12px;cursor:pointer}
     .btn.primary{background:linear-gradient(135deg,var(--accent),var(--accent2));border:0;color:#041a16;font-weight:700}
@@ -36,12 +36,25 @@
     .kpi{display:grid;grid-template-columns:repeat(2,1fr);gap:12px}
     @media(min-width:680px){.kpi{grid-template-columns:repeat(4,1fr)}}
     .kpi .box{background:#0e1625;border:1px solid #1a2436;border-radius:14px;padding:12px}
-    .kpi small{color:var(--muted)} .kpi strong{font-size:18px}
+    .kpi small{color:var(--muted)} .kpi strong{display:block;font-size:clamp(14px,4.5vw,22px);line-height:1.1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-variant-numeric:tabular-nums} .kpi .box{min-height:80px}
     .row{display:grid;gap:8px;margin-bottom:8px}
 
 /* MOBILE TABLE → CARDS */
 @media (max-width: 640px){
   #data_table thead{display:none}
+  #data_table, #data_table tbody, #data_table tr, #data_table td{display:block;width:100%}
+  #data_table tr{background:#0e1625;border:1px solid #1a2436;border-radius:12px;padding:10px;margin-bottom:10px}
+  #data_table td{border-bottom:0;padding:6px 0}
+  #data_table td::before{content:attr(data-label);display:block;color:var(--muted);font-size:12px;margin-bottom:2px}
+  #data_table td.actions{padding-top:8px}
+  #data_table .right{text-align:left}
+  /* Bigger controls on mobile */
+  .controls{gap:12px}
+  .controls > div{width:calc(50% - 6px)}
+  .controls input, .controls select{font-size:18px;padding:14px;border-radius:14px}
+  .controls label{font-size:13px}
+  h1{font-size:20px}
+}
   #data_table, #data_table tbody, #data_table tr, #data_table td{display:block;width:100%}
   #data_table tr{background:#0e1625;border:1px solid #1a2436;border-radius:12px;padding:10px;margin-bottom:10px}
   #data_table td{border-bottom:0;padding:6px 0}
