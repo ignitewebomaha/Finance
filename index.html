@@ -1,0 +1,292 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Finance Dashboard — Shared (Supabase)</title>
+  <meta name="description" content="Track weekly income (projected vs actual) and expenses (bills, groceries, debt) with estimates vs actuals. Shared in real-time via Supabase." />
+  <link rel="icon" href="data:;base64,iVBORw0KGgo=" />
+  <style>
+    :root{
+      --bg:#0b0f14;--panel:#111826;--card:#121a2a;--muted:#8aa0b6;--text:#e8eef6;
+      --accent:#60a5fa;--accent2:#34d399;--danger:#ef4444;--ring:#1f2937;
+    }
+    *{box-sizing:border-box}
+    html,body{height:100%}
+    body{margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Arial;background:linear-gradient(180deg,#0b0f14,#0d1320 40%,#0b0f14);color:var(--text);line-height:1.35}
+    .wrap{max-width:1100px;margin:0 auto;padding:16px}
+    header{display:flex;gap:12px;align-items:center;justify-content:space-between;margin-bottom:12px;flex-wrap:wrap}
+    h1{font-size:18px;margin:0;letter-spacing:.3px}
+    .controls{display:flex;gap:10px;flex-wrap:wrap;align-items:end}
+    label{font-size:12px;color:var(--muted);display:block;margin:0 0 6px}
+    input,select{width:100%;background:#0f1624;border:1px solid #1a2536;border-radius:12px;padding:10px;color:var(--text);outline:none}
+    input:focus,select:focus{border-color:var(--accent);box-shadow:0 0 0 4px rgba(96,165,250,.15)}
+    .btn{background:#182133;border:1px solid #27354b;color:var(--text);padding:10px 14px;border-radius:12px;cursor:pointer}
+    .btn.primary{background:linear-gradient(135deg,var(--accent),var(--accent2));border:0;color:#041a16;font-weight:700}
+    .btn.danger{background:#2a0f12;border-color:#3a1f23;color:#ffd1d1}
+    .grid{display:grid;grid-template-columns:1fr;gap:16px}
+    @media(min-width:920px){.grid{grid-template-columns:1fr 1fr} .span-2{grid-column:1 / span 2}}
+    .card{background:radial-gradient(1200px 500px at -200px -200px, rgba(96,165,250,.10), transparent 60%), var(--card);border:1px solid #1a2436;border-radius:16px;padding:14px}
+    table{width:100%;border-collapse:collapse}
+    th,td{border-bottom:1px solid #1a2436;padding:8px;text-align:left}
+    th{font-size:12px;color:var(--muted)}
+    .right{text-align:right}
+    footer{margin:20px 0;color:var(--muted);font-size:12px;text-align:center}
+
+    .kpi{display:grid;grid-template-columns:repeat(2,1fr);gap:12px}
+    @media(min-width:680px){.kpi{grid-template-columns:repeat(4,1fr)}}
+    .kpi .box{background:#0e1625;border:1px solid #1a2436;border-radius:14px;padding:12px}
+    .kpi small{color:var(--muted)} .kpi strong{font-size:18px}
+    .row{display:grid;gap:8px;margin-bottom:8px}
+    .category-label{text-align:center;font-size:16px;font-weight:600;margin-top:10px;color:var(--accent2)}
+    /* FIX: give the chart a stable container to stop layout jumps/scrolling */
+    .pie-wrap{position:relative;height:280px;width:100%;overflow:hidden}
+    .pie-wrap canvas{width:100% !important;height:100% !important;display:block}
+  </style>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.46.1/dist/umd/supabase.js"></script>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <h1>💸 Finance Dashboard — Shared</h1>
+      <div class="controls">
+        <div>
+          <label for="week">Week</label>
+          <input type="week" id="week">
+        </div>
+        <div>
+          <label for="household">Household Code</label>
+          <input type="text" id="household" placeholder="e.g. 11111" />
+        </div>
+        <button class="btn" id="save-household">Save Code</button>
+        <button class="btn" id="new-week">Clear Week</button>
+      </div>
+    </header>
+
+    <section class="card kpi span-2">
+      <div class="box"><small>Starting Income (Actual)</small><strong id="k-start">$0.00</strong></div>
+      <div class="box"><small>Total Expenses (Actual)</small><strong id="k-exp">$0.00</strong></div>
+      <div class="box"><small>Remaining After Expenses</small><strong id="k-remaining">$0.00</strong></div>
+      <div class="box"><small>Projected Net (Income − Est. Expenses)</small><strong id="k-projnet">$0.00</strong></div>
+    </section>
+
+    <section class="card grid span-2">
+      <div>
+        <h2>Add Income</h2>
+        <label>Projected</label><input type="number" id="inc_proj" placeholder="0.00" step="0.01">
+        <label>Actual</label><input type="number" id="inc_act" placeholder="0.00" step="0.01">
+        <label>Note</label><input type="text" id="inc_note" placeholder="e.g. Paycheck">
+        <button class="btn primary" id="add_income">Add Income</button>
+      </div>
+      <div>
+        <h2>Add Expense</h2>
+        <label>Category</label>
+        <select id="exp_cat"><option>Bills</option><option>Groceries</option><option>Debt</option><option>Transportation</option><option>Gas</option><option>Insurance</option><option>Entertainment</option><option>Shopping</option><option>Other</option></select>
+        <label>Estimated</label><input type="number" id="exp_est" placeholder="0.00" step="0.01">
+        <label>Actual</label><input type="number" id="exp_act" placeholder="0.00" step="0.01">
+        <label>Note</label><input type="text" id="exp_note" placeholder="e.g. Electric Bill">
+        <button class="btn primary" id="add_exp">Add Expense</button>
+      </div>
+    </section>
+
+    <section class="card span-2">
+      <h2>Income & Expenses (This Week)</h2>
+      <table id="data_table">
+        <thead><tr><th>Type</th><th>Category</th><th>Projected/Est</th><th>Actual</th><th>Note</th><th></th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </section>
+
+    <section class="card span-2">
+      <h2>Spending by Category (Actual)</h2>
+      <div class="pie-wrap"><canvas id="pie"></canvas></div>
+      <div id="categoryText" class="category-label">Category: N/A</div>
+      <p class="small">Pie shows the split of actual expenses by category for the selected week.</p>
+    </section>
+
+    <footer>Shared via Supabase · GitHub Pages friendly · Data loads live for anyone using the same Household Code</footer>
+  </div>
+
+  <script>
+  // ==== CONFIG (replace with your real credentials) ====
+  const SUPABASE_URL = "https://kmzkoexyeygkrhckelog.supabase.co";
+  const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImttemtvZXh5ZXlna3JoY2tlbG9nIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjExNzI3NzIsImV4cCI6MjA3Njc0ODc3Mn0.aBGcZF7MHUskNBOqIBtRE3wgVgMx1c6T7G55WF9ZN2U";
+  const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+  // DOM helpers & formatters
+  const $ = (id) => document.getElementById(id);
+  const fmt = new Intl.NumberFormat(undefined,{style:'currency',currency:'USD'});
+
+  // State
+  let entries = [];
+  let household = localStorage.getItem('household') || '';
+  if(household) $('household').value = household;
+
+  // Week handling
+  const now = new Date();
+  const y = now.getFullYear();
+  const wk = getISOWeek(now);
+  $('week').value = localStorage.getItem('lastWeek') || `${y}-W${String(wk).padStart(2,'0')}`;
+  function getISOWeek(date){ const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate())); const dayNum = d.getUTCDay() || 7; d.setUTCDate(d.getUTCDate() + 4 - dayNum); const yearStart = new Date(Date.UTC(d.getUTCFullYear(),0,1)); return Math.ceil((((d - yearStart) / 86400000) + 1)/7); }
+  function currentWeek(){ const w = $('week').value; localStorage.setItem('lastWeek', w); return w; }
+
+  // Table body reference (FIX for earlier ReferenceError)
+  const tbody = document.querySelector('#data_table tbody');
+
+  // PIE CHART (colors + style)
+  const pieCtx = $('pie');
+  const colors = ['#60A5FA','#34D399','#FBBF24','#F87171','#A78BFA','#F472B6','#4ADE80','#22D3EE','#FB7185'];
+  let pieChart = new Chart(pieCtx, {
+    type: 'doughnut',
+    data: {
+      labels: [],
+      datasets: [{
+        data: [],
+        backgroundColor: colors,
+        borderColor: '#0b0f14',
+        borderWidth: 2,
+        hoverOffset: 8
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false, // use .pie-wrap's fixed height
+      cutout: '60%',
+      animation: { duration: 250 },
+      plugins: {
+        legend: {
+          position: 'bottom',
+          labels: { color: '#e8eef6', font: { size: 14 } }
+        },
+        tooltip: {
+          backgroundColor: '#111826',
+          titleColor: '#60a5fa',
+          bodyColor: '#e8eef6',
+          borderWidth: 1,
+          borderColor: '#27354b',
+          padding: 10,
+          callbacks: {
+            label: (ctx) => `${ctx.label}: ${fmt.format(Number(ctx.raw||0))}`
+          }
+        }
+      },
+      onHover: (evt, els) => {
+        const el = $('categoryText'); if(!el) return;
+        if (els && els.length) {
+          const i = els[0].index;
+          const label = pieChart.data.labels[i];
+          const val = pieChart.data.datasets[0].data[i];
+          el.textContent = `Category: ${label} (${fmt.format(Number(val||0))})`;
+        } else {
+          el.textContent = 'Category: N/A';
+        }
+      }
+    }
+  });
+
+  // Render function — builds table, KPIs, and updates chart
+  function render(){
+    const rows = entries;
+    tbody.innerHTML = '';
+
+    for(const e of rows){
+      const tr = document.createElement('tr');
+      const projOrEst = e.type==='Income' ? e.proj : e.est;
+      const cat = e.type==='Income' ? '' : (e.cat||'');
+      tr.innerHTML = `
+        <td>${e.type}</td>
+        <td>${cat}</td>
+        <td class="right">${fmt.format(Number(projOrEst||0))}</td>
+        <td class="right">${fmt.format(Number(e.act||0))}</td>
+        <td>${e.note||''}</td>
+        <td><button class="btn danger" data-del="${e.id}">Delete</button></td>`;
+      tbody.appendChild(tr);
+    }
+
+    const incProj = rows.filter(r=>r.type==='Income').reduce((s,r)=>s+(Number(r.proj)||0),0);
+    const incAct  = rows.filter(r=>r.type==='Income').reduce((s,r)=>s+(Number(r.act)||0),0);
+    const expEst  = rows.filter(r=>r.type==='Expense').reduce((s,r)=>s+(Number(r.est)||0),0);
+    const expAct  = rows.filter(r=>r.type==='Expense').reduce((s,r)=>s+(Number(r.act)||0),0);
+
+    $('k-start').textContent    = fmt.format(incAct);
+    $('k-exp').textContent      = fmt.format(expAct);
+    $('k-remaining').textContent= fmt.format(incAct - expAct);
+    $('k-projnet').textContent  = fmt.format(incProj - expEst);
+
+    const byCat = {};
+    for(const r of rows){ if(r.type==='Expense'){ byCat[r.cat||'Other'] = (byCat[r.cat||'Other']||0) + (Number(r.act)||0); } }
+    const labels = Object.keys(byCat);
+    const data = labels.map(k=>byCat[k]);
+
+    pieChart.data.labels = labels;
+    pieChart.data.datasets[0].data = data;
+    pieChart.update();
+
+    // Reset category label if no data
+    if(labels.length===0){ const el = $('categoryText'); if(el) el.textContent = 'Category: N/A'; }
+  }
+
+  // Supabase operations
+  async function loadWeek(){
+    if(!household){ entries = []; render(); return; }
+    const { data, error } = await sb
+      .from('entries')
+      .select('*')
+      .eq('household', household)
+      .eq('week', currentWeek())
+      .order('created_at', { ascending: true });
+    if(error){ console.error(error); return; }
+    entries = data || []; render();
+  }
+
+  async function addIncome(){
+    const row = { week: currentWeek(), household, type:'Income', proj:Number($('inc_proj').value||0), act:Number($('inc_act').value||0), cat:null, est:null, note:$('inc_note').value.trim() };
+    if(!row.proj && !row.act){ alert('Enter at least projected or actual.'); return; }
+    const { error } = await sb.from('entries').insert(row); if(error){ alert('Save failed: '+error.message); return; }
+    $('inc_proj').value = $('inc_act').value = $('inc_note').value = '';
+    await loadWeek();
+  }
+
+  async function addExpense(){
+    const row = { week: currentWeek(), household, type:'Expense', cat:$('exp_cat').value, est:Number($('exp_est').value||0), act:Number($('exp_act').value||0), proj:null, note:$('exp_note').value.trim() };
+    if(!row.est && !row.act){ alert('Enter at least estimated or actual.'); return; }
+    const { error } = await sb.from('entries').insert(row); if(error){ alert('Save failed: '+error.message); return; }
+    $('exp_est').value = $('exp_act').value = $('exp_note').value = '';
+    await loadWeek();
+  }
+
+  async function deleteRow(id){
+    const { error } = await sb.from('entries').delete().eq('id', id).eq('household', household);
+    if(error){ alert('Delete failed: '+error.message); return; }
+    await loadWeek();
+  }
+
+  // Realtime subscription for this household
+  let channel = null;
+  async function subscribeRealtime(){
+    if(channel) { sb.removeChannel(channel); channel=null; }
+    if(!household) return;
+    channel = sb.channel('entries-'+household)
+      .on('postgres_changes', { event:'*', schema:'public', table:'entries', filter:`household=eq.${household}` }, (payload)=>{
+        if(payload.new?.week === currentWeek() || payload.old?.week === currentWeek()) loadWeek();
+      })
+      .subscribe();
+  }
+
+  // UI Events
+  $('add_income').addEventListener('click', ()=>{ if(!household){ alert('Set a Household Code first.'); return; } addIncome(); });
+  $('add_exp').addEventListener('click', ()=>{ if(!household){ alert('Set a Household Code first.'); return; } addExpense(); });
+  $('data_table').addEventListener('click', (e)=>{ const id = e.target.closest('[data-del]')?.getAttribute('data-del'); if(!id) return; if(!household){ alert('Set a Household Code first.'); return; } deleteRow(id); });
+  $('week').addEventListener('change', loadWeek);
+  $('new-week').addEventListener('click', async ()=>{ if(!household) return alert('Set a Household Code first.'); if(!confirm('Clear ALL rows for this week?')) return; const { error } = await sb.from('entries').delete().eq('household', household).eq('week', currentWeek()); if(error){ alert('Failed to clear: '+error.message); return; } await loadWeek(); });
+  $('save-household').addEventListener('click', ()=>{ household = $('household').value.trim(); localStorage.setItem('household', household); subscribeRealtime(); loadWeek(); });
+
+  // Boot
+  subscribeRealtime();
+  loadWeek();
+  </script>
+
+  <!-- Supabase quick-start SQL is unchanged; see previous message for details. -->
+</body>
+</html>
